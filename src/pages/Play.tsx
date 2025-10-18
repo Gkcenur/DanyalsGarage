@@ -46,7 +46,16 @@ const COLOR_MAP: Record<string, { body: string; stripes?: string[]; glow?: strin
   "SIDE_THE_Z4_M40I.AVIF": { body: "#001f3f" },
 };
 
-/* --- Üstten görünüm araba çizimi --- */
+/* dosya adını normalize et (query, hash temizle, upper-case) */
+function normalizeAssetName(url: string): { full: string; base: string } {
+  const last = (url.split("/").pop() || "").split("?")[0];
+  const withoutHash = last.replace(/\.[a-f0-9]{6,16}(?=\.\w+$)/i, "");
+  const upper = decodeURIComponent(withoutHash).toUpperCase();
+  const base = upper.replace(/\.(AVIF|WEBP)$/, "");
+  return { full: upper, base };
+}
+
+/* üstten görünüm araba çizimi */
 function drawPlayerCar(
   ctx: CanvasRenderingContext2D,
   size: number,
@@ -164,15 +173,19 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
     return i;
   }, [carImg]);
 
-  // >>> Dosya adını normalize et (RENK İÇİN KRİTİK) <<<
-  const imgKey = useMemo(() => {
-    if (!carImg) return "";
-    const last = carImg.split("/").pop() || "";
-    const noQuery = last.split("?")[0];
-    return decodeURIComponent(noQuery).toUpperCase();
-  }, [carImg]);
+  // normalize edilmiş dosya adı → renk paleti
+  const { full: keyFull, base: keyBase } = useMemo(
+    () => (carImg ? normalizeAssetName(carImg) : { full: "", base: "" }),
+    [carImg]
+  );
 
-  const palette = useMemo(() => COLOR_MAP[imgKey] ?? { body: "#cfd8e6" }, [imgKey]);
+  let palette = COLOR_MAP[keyFull as keyof typeof COLOR_MAP];
+  if (!palette && keyBase) {
+    palette =
+      COLOR_MAP[`${keyBase}.AVIF` as keyof typeof COLOR_MAP] ||
+      COLOR_MAP[`${keyBase}.WEBP` as keyof typeof COLOR_MAP];
+  }
+  palette = palette || { body: "#cfd8e6" };
 
   // state
   const playerRef = useRef({ x: 0, y: 0, r: 16, lane: 1, nitro: 0 });
@@ -219,14 +232,18 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
     playerRef.current.x = lanesRef.current[1];
     playerRef.current.y = H * 0.8;
 
-    // dokunmatik: swipe
+    // touch swipe
     let sx = 0, sy = 0;
     const ts = (e: TouchEvent) => { sx = e.changedTouches[0].clientX; sy = e.changedTouches[0].clientY; };
     const te = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - sx;
       const dy = e.changedTouches[0].clientY - sy;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) { dx < 0 ? moveLeft() : moveRight(); }
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+        if (dx < 0) moveLeft();
+        else moveRight();
+      }
     };
+
 
     canvas.addEventListener("touchstart", ts, { passive: true });
     canvas.addEventListener("touchend", te, { passive: true });
@@ -268,7 +285,7 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
       // çizim
       ctx.clearRect(0, 0, W, H);
 
-      // hız çizgileri
+      // arka hız çizgileri
       for (let i = 0; i < 22; i++) {
         const y = ((t * speedRef.current * 4 + (i * H) / 22) % H);
         ctx.globalAlpha = 0.25;
@@ -277,7 +294,7 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
       }
       ctx.globalAlpha = 1;
 
-      // şeritler
+      // yol şeritleri
       ctx.strokeStyle = "#1f2740";
       ctx.lineWidth = 2;
       ctx.setLineDash([10, 16]);
@@ -299,15 +316,12 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
         ctx.globalAlpha = 1;
       }
 
-      // gövde + detaylar
+      // gövde + detaylar (M şeritleri YOK)
       drawPlayerCar(ctx, playerRef.current.r, palette.body);
-
-      // M-şeritleri
-
 
       ctx.restore();
 
-      // engeller (yuvarlak köşeli dikdörtgen)
+      // engeller
       ctx.fillStyle = "#2f3758";
       for (const o of obstaclesRef.current) {
         const ow = o.w * 0.6, oh = o.h * 0.7, r = 10;
@@ -358,7 +372,7 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
       canvas.removeEventListener("touchstart", ts);
       canvas.removeEventListener("touchend", te);
     };
-  }, [carName, imgEl, palette]);
+  }, [carName, imgEl, keyFull, keyBase, palette]);
 
   return (
     <div className="play-wrap">
