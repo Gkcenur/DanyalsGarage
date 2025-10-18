@@ -1,7 +1,8 @@
+// src/pages/Play.tsx
 import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 
-/* === Seçilen araba görsel adına göre renk paleti === */
+/* === Seçilen araba görsel adına göre renk paleti (ANAHTARLAR UPPERCASE!) === */
 const COLOR_MAP: Record<string, { body: string; stripes?: string[]; glow?: string }> = {
   "SIDE_THE_I4_M60_XDRIVE.AVIF": { body: "#0b6b2a" },
   "SIDE_THE_I5_M60_SEDAN.AVIF": { body: "#d90f28" },
@@ -46,16 +47,17 @@ const COLOR_MAP: Record<string, { body: string; stripes?: string[]; glow?: strin
   "SIDE_THE_Z4_M40I.AVIF": { body: "#001f3f" },
 };
 
-/* dosya adını normalize et (query, hash temizle, upper-case) */
+/* dosya adını normalize et (query/hash temizle, UPPERCASE, base adı çıkar) */
 function normalizeAssetName(url: string): { full: string; base: string } {
   const last = (url.split("/").pop() || "").split("?")[0];
+  // e.g. SIDE_THE_X.avif?t=123 veya SIDE_THE_X.abcdef.avif → hash/query at
   const withoutHash = last.replace(/\.[a-f0-9]{6,16}(?=\.\w+$)/i, "");
   const upper = decodeURIComponent(withoutHash).toUpperCase();
   const base = upper.replace(/\.(AVIF|WEBP)$/, "");
   return { full: upper, base };
 }
 
-/* üstten görünüm araba çizimi */
+/* --- Üstten görünüm araba çizimi (M şeridi YOK) --- */
 function drawPlayerCar(
   ctx: CanvasRenderingContext2D,
   size: number,
@@ -143,6 +145,7 @@ export default function Play() {
   return (
     <section className="play-page">
       <div className="play-top">
+        {/* Router’a bağlı kalmadan kesin dönüş */}
         <a
           className="back-link"
           href="/"
@@ -173,12 +176,11 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
     return i;
   }, [carImg]);
 
-  // normalize edilmiş dosya adı → renk paleti
+  // normalize edilmiş dosya adı → renk paleti (önce tam, sonra base+.AVIF/.WEBP)
   const { full: keyFull, base: keyBase } = useMemo(
     () => (carImg ? normalizeAssetName(carImg) : { full: "", base: "" }),
     [carImg]
   );
-
   let palette = COLOR_MAP[keyFull as keyof typeof COLOR_MAP];
   if (!palette && keyBase) {
     palette =
@@ -243,7 +245,6 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
         else moveRight();
       }
     };
-
 
     canvas.addEventListener("touchstart", ts, { passive: true });
     canvas.addEventListener("touchend", te, { passive: true });
@@ -316,7 +317,7 @@ function GameCanvas({ carName, carImg }: { carName: string; carImg: string }) {
         ctx.globalAlpha = 1;
       }
 
-      // gövde + detaylar (M şeritleri YOK)
+      // gövde + detaylar (seçilen renkle)
       drawPlayerCar(ctx, playerRef.current.r, palette.body);
 
       ctx.restore();
